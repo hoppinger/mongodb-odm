@@ -622,7 +622,7 @@ class UnitOfWork implements PropertyChangedListener
                             break;
                         }
                     }
-                 }
+                }
             }
         }
     }
@@ -681,7 +681,11 @@ class UnitOfWork implements PropertyChangedListener
      */
     private function computeAssociationChanges($parentDocument, $mapping, $value)
     {
-        if ($value instanceof PersistentCollection && $value->isDirty() && $mapping['isOwningSide']) {
+        $isNewParentDocument = in_array($parentDocument,$this->documentInsertions, true);
+        $class = $this->dm->getClassMetadata(get_class($parentDocument));
+        $topOrExistingDocument = (!$isNewParentDocument || !$class->isEmbeddedDocument);
+
+        if ($value instanceof PersistentCollection && $value->isDirty() && $mapping['isOwningSide'] && $topOrExistingDocument) {
             $owner = $value->getOwner();
             $className = get_class($owner);
             $class = $this->dm->getClassMetadata($className);
@@ -719,10 +723,14 @@ class UnitOfWork implements PropertyChangedListener
                 }
                 $this->persistNew($targetClass, $entry);
                 $this->setParentAssociation($entry, $mapping, $parentDocument, $path);
-                $this->computeChangeSet($targetClass, $entry);
+                if ($topOrExistingDocument) {
+                    $this->computeChangeSet($targetClass, $entry);
+                }
             } else if ($state == self::STATE_MANAGED && $targetClass->isEmbeddedDocument) {
                 $this->setParentAssociation($entry, $mapping, $parentDocument, $path);
-                $this->computeChangeSet($targetClass, $entry);
+                if ($topOrExistingDocument) {
+                    $this->computeChangeSet($targetClass, $entry);
+                }
             } else if ($state == self::STATE_REMOVED) {
                 return new \InvalidArgumentException("Removed document detected during flush: "
                         . self::objToStr($removedDocument).". Remove deleted documents from associations.");
